@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from esphome.const import (
     CONF_COMMENT,
+    CONF_DOMAIN,
     CONF_ESPHOME,
     CONF_ETHERNET,
     CONF_OPENTHREAD,
@@ -663,10 +664,20 @@ class EsphomeCore:
 
         for network_type in (CONF_WIFI, CONF_ETHERNET, CONF_OPENTHREAD):
             if network_type in self.config:
-                return self.config[network_type][CONF_USE_ADDRESS]
+                network_config = self.config[network_type]
+                if CONF_USE_ADDRESS in network_config:
+                    return network_config[CONF_USE_ADDRESS]
 
-        if CONF_OPENTHREAD in self.config:
-            return f"{self.name}.local"
+                # Some network integrations can keep use_address implicit and
+                # derive it from node name at runtime.
+                if self.name is None:
+                    return None
+
+                if network_type == CONF_OPENTHREAD:
+                    return f"{self.name}.local"
+
+                domain = network_config.get(CONF_DOMAIN, ".local")
+                return f"{self.name}{domain}"
 
         return None
 

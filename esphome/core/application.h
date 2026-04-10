@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <cstring>
 #include <limits>
 #include <span>
 #include <string>
@@ -173,6 +174,7 @@ class Application {
     }
     this->name_ = StringRef(name, name_len);
     this->friendly_name_ = StringRef(friendly_name, friendly_name_len);
+    this->load_name_override_from_preferences_();
   }
 #else
   // Called before Logger::pre_setup() — must not log (global_logger is not yet set).
@@ -182,6 +184,7 @@ class Application {
     this->name_add_mac_suffix_ = false;
     this->name_ = StringRef(name, name_len);
     this->friendly_name_ = StringRef(friendly_name, friendly_name_len);
+    this->load_name_override_from_preferences_();
   }
 #endif
 
@@ -308,6 +311,10 @@ class Application {
 
   /// Get the name of this Application set by pre_setup().
   const StringRef &get_name() const { return this->name_; }
+
+  /// Set application name at runtime and persist it in preferences for next boot.
+  /// Returns false when name is invalid or persistence fails.
+  bool set_name(const char *name);
 
   /// Get the friendly name of this Application set by pre_setup().
   const StringRef &get_friendly_name() const { return this->friendly_name_; }
@@ -606,6 +613,16 @@ class Application {
 
   void register_component_impl_(Component *comp, bool has_loop);
 
+  static constexpr size_t ESPHOME_APP_NAME_MAX_LEN = 31;
+
+  struct SavedApplicationName {
+    char name[ESPHOME_APP_NAME_MAX_LEN + 1];
+  };
+
+  bool validate_runtime_name_(const char *name, size_t len) const;
+  void apply_runtime_name_(const char *name, size_t len);
+  void load_name_override_from_preferences_();
+
   void calculate_looping_components_() {
     // FixedVector capacity was pre-initialized by codegen with the exact count
     // of components that override loop(), computed at C++ compile time.
@@ -708,6 +725,9 @@ class Application {
   bool name_add_mac_suffix_;
   bool in_loop_{false};
   volatile bool has_pending_enable_loop_requests_{false};
+
+  // Runtime-overridden app name storage (must outlive StringRef in name_).
+  char runtime_name_buffer_[ESPHOME_APP_NAME_MAX_LEN + 1]{};
 
 #if defined(USE_SOCKET_SELECT_SUPPORT) && !defined(USE_LWIP_FAST_SELECT)
   bool socket_fds_changed_{false};  // Flag to rebuild base_read_fds_ when socket_fds_ changes

@@ -49,6 +49,8 @@
 namespace esphome {
 
 static const char *const TAG = "app";
+static const char *const APP_NAME_PREFERENCE_KEY = "esphome.app_name_override.v1";
+static const char *const APP_NAME_ALLOWED_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-_";
 
 // Helper function for insertion sort of components by priority
 // Using insertion sort instead of std::stable_sort saves ~1.3KB of flash
@@ -69,6 +71,76 @@ static void insertion_sort_by_priority(Iterator first, Iterator last) {
     }
     *(j + 1) = key;
   }
+}
+
+bool Application::validate_runtime_name_(const char *name, size_t len) const {
+  if (len == 0 || len > ESPHOME_APP_NAME_MAX_LEN) {
+    return false;
+  }
+  for (size_t i = 0; i < len; i++) {
+    if (std::strchr(APP_NAME_ALLOWED_CHARS, name[i]) == nullptr) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void Application::apply_runtime_name_(const char *name, size_t len) {
+  std::memcpy(this->runtime_name_buffer_, name, len);
+  this->runtime_name_buffer_[len] = '\0';
+  this->name_ = StringRef(this->runtime_name_buffer_, len);
+}
+
+void Application::load_name_override_from_preferences_() {
+  if (global_preferences == nullptr) {
+    return;
+  }
+
+  ESPPreferenceObject pref =
+      global_preferences->make_preference<SavedApplicationName>(fnv1_hash(APP_NAME_PREFERENCE_KEY), true);
+  SavedApplicationName saved{};
+  if (!pref.load(&saved)) {
+    return;
+  }
+
+  saved.name[ESPHOME_APP_NAME_MAX_LEN] = '\0';
+  size_t len = strnlen(saved.name, ESPHOME_APP_NAME_MAX_LEN + 1);
+  if (!this->validate_runtime_name_(saved.name, len)) {
+    return;
+  }
+
+  this->apply_runtime_name_(saved.name, len);
+}
+
+bool Application::set_name(const char *name) {
+  if (name == nullptr) {
+    return false;
+  }
+
+  size_t len = strnlen(name, ESPHOME_APP_NAME_MAX_LEN + 1);
+  if (!this->validate_runtime_name_(name, len)) {
+    return false;
+  }
+
+  if (this->name_.size() == len && std::memcmp(this->name_.c_str(), name, len) == 0) {
+    return true;
+  }
+
+  this->apply_runtime_name_(name, len);
+
+  if (global_preferences == nullptr) {
+    return false;
+  }
+
+  SavedApplicationName saved{};
+  std::memcpy(saved.name, this->runtime_name_buffer_, len + 1);
+
+  ESPPreferenceObject pref =
+      global_preferences->make_preference<SavedApplicationName>(fnv1_hash(APP_NAME_PREFERENCE_KEY), true);
+  if (!pref.save(&saved)) {
+    return false;
+  }
+  return global_preferences->sync();
 }
 
 void Application::register_component_impl_(Component *comp, bool has_loop) {

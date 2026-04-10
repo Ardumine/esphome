@@ -878,6 +878,27 @@ void WiFiComponent::loop() {
 
 WiFiComponent::WiFiComponent() { global_wifi_component = this; }
 
+const char *WiFiComponent::get_use_address() const {
+  if (!this->use_address_from_app_name_) {
+    return this->use_address_;
+  }
+
+  static constexpr char DEFAULT_DOMAIN[] = ".local";
+  static constexpr size_t DEFAULT_DOMAIN_LEN = sizeof(DEFAULT_DOMAIN) - 1;
+
+  const auto &app_name = App.get_name();
+  size_t app_name_len = app_name.size();
+  const size_t max_name_len = sizeof(this->use_address_from_app_name_buffer_) - DEFAULT_DOMAIN_LEN - 1;
+  if (app_name_len > max_name_len) {
+    app_name_len = max_name_len;
+  }
+
+  memcpy(this->use_address_from_app_name_buffer_, app_name.c_str(), app_name_len);
+  memcpy(this->use_address_from_app_name_buffer_ + app_name_len, DEFAULT_DOMAIN, DEFAULT_DOMAIN_LEN + 1);
+
+  return this->use_address_from_app_name_buffer_;
+}
+
 #ifdef USE_WIFI_11KV_SUPPORT
 void WiFiComponent::set_btm(bool btm) { this->btm_ = btm; }
 void WiFiComponent::set_rrm(bool rrm) { this->rrm_ = rrm; }

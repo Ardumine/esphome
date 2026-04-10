@@ -339,7 +339,7 @@ def _validate(config):
         config[CONF_NETWORKS] = []
 
     if CONF_USE_ADDRESS not in config:
-        use_address = CORE.name + config[CONF_DOMAIN]
+        use_address = None
         if CONF_MANUAL_IP in config:
             use_address = str(config[CONF_MANUAL_IP][CONF_STATIC_IP])
         elif CONF_NETWORKS in config:
@@ -355,7 +355,13 @@ def _validate(config):
             if len(ips) == 1:
                 use_address = next(iter(ips))
 
-        config[CONF_USE_ADDRESS] = use_address
+        # Keep the default '<name>.local' implicit so C++ can derive it from
+        # App.get_name() at runtime instead of hard-coding the node name.
+        if use_address is None and config[CONF_DOMAIN] != ".local":
+            use_address = CORE.name + config[CONF_DOMAIN]
+
+        if use_address is not None:
+            config[CONF_USE_ADDRESS] = use_address
 
     return config
 
@@ -489,7 +495,10 @@ def wifi_network(config, ap, static_ip):
 @coroutine_with_priority(CoroPriority.COMMUNICATION)
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
-    cg.add(var.set_use_address(config[CONF_USE_ADDRESS]))
+    if CONF_USE_ADDRESS in config:
+        cg.add(var.set_use_address(config[CONF_USE_ADDRESS]))
+    else:
+        cg.add(var.set_use_address_from_app_name())
 
     # Track if any network uses Enterprise authentication
     has_eap = False

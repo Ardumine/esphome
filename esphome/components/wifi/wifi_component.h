@@ -481,8 +481,12 @@ class WiFiComponent final : public Component {
 
   network::IPAddress get_dns_address(int num);
   network::IPAddresses get_ip_addresses();
-  const char *get_use_address() const { return this->use_address_; }
-  void set_use_address(const char *use_address) { this->use_address_ = use_address; }
+  const char *get_use_address() const;
+  void set_use_address(const char *use_address) {
+    this->use_address_ = use_address;
+    this->use_address_from_app_name_ = false;
+  }
+  void set_use_address_from_app_name() { this->use_address_from_app_name_ = true; }
 
   const wifi_scan_vector_t<WiFiScanResult> &get_scan_result() const { return scan_result_; }
 
@@ -867,9 +871,13 @@ class WiFiComponent final : public Component {
 #endif
 
  private:
-  // Stores a pointer to a string literal (static storage duration).
-  // ONLY set from Python-generated code with string literals - never dynamic strings.
+  // Stores an explicit use_address pointer (typically a string literal from Python-generated code).
   const char *use_address_{""};
+  // Buffer for runtime-derived '<name>.local' use_address.
+  // Sized for a 63-character hostname + '.local' + null terminator.
+  static constexpr size_t USE_ADDRESS_FROM_APP_NAME_BUFFER_SIZE = 70;
+  mutable char use_address_from_app_name_buffer_[USE_ADDRESS_FROM_APP_NAME_BUFFER_SIZE]{};
+  bool use_address_from_app_name_{false};
 };
 
 extern WiFiComponent *global_wifi_component;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)

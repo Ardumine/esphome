@@ -564,6 +564,13 @@ class TestEsphomeCore:
 
         assert target.address == "1.2.3.4"
 
+    def test_address__wifi_implicit(self, target):
+        target.config = {}
+        target.name = "test-device"
+        target.config[const.CONF_WIFI] = {const.CONF_DOMAIN: ".local"}
+
+        assert target.address == "test-device.local"
+
     def test_address__ethernet(self, target):
         target.config = {}
         target.config[const.CONF_ETHERNET] = {const.CONF_USE_ADDRESS: "4.3.2.1"}
