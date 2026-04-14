@@ -78,22 +78,50 @@ std::unique_ptr<Socket> socket_ip(int type, int protocol);
 /// NOTE: On ESP platforms, FD_SETSIZE is typically 10, limiting the number of monitored sockets.
 /// File descriptors >= FD_SETSIZE will not be monitored and will log an error.
 std::unique_ptr<Socket> socket_loop_monitored(int domain, int type, int protocol);
-std::unique_ptr<Socket> socket_ip_loop_monitored(int type, int protocol);
+
+/// Create a listening socket of the given domain, type and protocol.
+/// Create a listening socket and monitor it for data in the main loop.
+/// Create a listening socket in the newest available IP domain and monitor it.
+#ifdef USE_SOCKET_IMPL_LWIP_TCP
+// LWIP_TCP has separate Socket/ListenSocket types — needs distinct factory functions.
+std::unique_ptr<ListenSocket> socket_listen(int domain, int type, int protocol);
+std::unique_ptr<ListenSocket> socket_listen_loop_monitored(int domain, int type, int protocol);
+std::unique_ptr<ListenSocket> socket_ip_loop_monitored(int type, int protocol);
+#else
+// BSD and LWIP_SOCKETS: Socket == ListenSocket, so listen variants just delegate.
+inline std::unique_ptr<ListenSocket> socket_listen(int domain, int type, int protocol) {
+  return socket(domain, type, protocol);
+}
+inline std::unique_ptr<ListenSocket> socket_listen_loop_monitored(int domain, int type, int protocol) {
+  return socket_loop_monitored(domain, type, protocol);
+}
+inline std::unique_ptr<ListenSocket> socket_ip_loop_monitored(int type, int protocol) {
+#if USE_NETWORK_IPV6
+  return socket_loop_monitored(AF_INET6, type, protocol);
+#else
+  return socket_loop_monitored(AF_INET, type, protocol);
+#endif
+}
+#endif
 
 /// Set a sockaddr to the specified address and port for the IP version used by socket_ip().
-socklen_t set_sockaddr(struct sockaddr *addr, socklen_t addrlen, const std::string &ip_address, uint16_t port);
+/// @param addr Destination sockaddr structure
+/// @param addrlen Size of the addr buffer
+/// @param ip_address Null-terminated IP address string (IPv4 or IPv6)
+/// @param port Port number in host byte order
+/// @return Size of the sockaddr structure used, or 0 on error
+socklen_t set_sockaddr(struct sockaddr *addr, socklen_t addrlen, const char *ip_address, uint16_t port);
+
+/// Convenience overload for std::string (backward compatible).
+inline socklen_t set_sockaddr(struct sockaddr *addr, socklen_t addrlen, const std::string &ip_address, uint16_t port) {
+  return set_sockaddr(addr, addrlen, ip_address.c_str(), port);
+}
 
 /// Set a sockaddr to the any address and specified port for the IP version used by socket_ip().
 socklen_t set_sockaddr_any(struct sockaddr *addr, socklen_t addrlen, uint16_t port);
 
-#if defined(USE_ESP8266) && defined(USE_SOCKET_IMPL_LWIP_TCP)
-/// Delay that can be woken early by socket activity.
-/// On ESP8266, lwip callbacks set a flag and call esp_schedule() to wake the delay.
-void socket_delay(uint32_t ms);
-
-/// Called by lwip callbacks to signal socket activity and wake delay.
-void socket_wake();
-#endif
+/// Format sockaddr into caller-provided buffer, returns length written (excluding null)
+size_t format_sockaddr_to(const struct sockaddr *addr_ptr, socklen_t len, std::span<char, SOCKADDR_STR_LEN> buf);
 
 }  // namespace esphome::socket
 #endif

@@ -4,6 +4,8 @@ from esphome.components.esp32 import (
     VARIANT_ESP32C6,
     VARIANT_ESP32H2,
     add_idf_sdkconfig_option,
+    get_esp32_variant,
+    include_builtin_idf_component,
     only_on_variant,
 )
 from esphome.components.mdns import MDNSComponent, enable_mdns_storage
@@ -44,6 +46,15 @@ CONFLICTS_WITH = ["wifi"]
 # DEPENDENCIES = ["esp32"]  # Removed - will be platform-specific
 
 
+IDF_TO_OT_LOG_LEVEL = {
+    "NONE": "NONE",
+    "ERROR": "CRIT",
+    "WARN": "WARN",
+    "INFO": "NOTE",
+    "DEBUG": "INFO",
+    "VERBOSE": "DEBG",
+}
+
 CONF_DEVICE_TYPES = [
     "FTD",
     "MTD",
@@ -57,6 +68,11 @@ def set_esp32_sdkconfig_options(config):
 
     # There is a conflict if the logger's uart also uses the default UART, which is seen as a watchdog failure on "ot_cli"
     add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CLI", False)
+    # Console is the transport layer for CLI; disable it too since CLI is disabled
+    add_idf_sdkconfig_option("CONFIG_OPENTHREAD_CONSOLE_ENABLE", False)
+
+    # Diag unused, if needed for lab/cert/etc tests then enable separately
+    add_idf_sdkconfig_option("CONFIG_OPENTHREAD_DIAG", False)
 
     add_idf_sdkconfig_option("CONFIG_OPENTHREAD_ENABLED", True)
 
@@ -278,6 +294,10 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_TLV): cv.string_strict,
             cv.Optional(CONF_USE_ADDRESS): cv.string_strict,
             cv.Optional(CONF_POLL_PERIOD): cv.positive_time_period_milliseconds,
+            cv.Optional(CONF_OUTPUT_POWER): cv.All(
+                cv.decibel,
+                _validate_txpower,
+            ),
         }
     ).extend(_CONNECTION_SCHEMA),
     cv.has_exactly_one_key(CONF_NETWORK_KEY, CONF_TLV),
@@ -295,6 +315,15 @@ def _final_validate(_):
             "OpenThread requires IPv6 to be enabled in the network component. "
             "Please set `enable_ipv6: true` in the `network` configuration."
         )
+
+    if (
+        (esp32_config := full_config.get(PLATFORM_ESP32)) is not None
+        and (fw_config := esp32_config.get(CONF_FRAMEWORK)) is not None
+        and (log_level := fw_config.get(CONF_LOG_LEVEL)) is not None
+    ):
+        add_idf_sdkconfig_option("CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC", False)
+        ot_log_level = IDF_TO_OT_LOG_LEVEL.get(log_level, log_level)
+        add_idf_sdkconfig_option(f"CONFIG_OPENTHREAD_LOG_LEVEL_{ot_log_level}", True)
 
 
 FINAL_VALIDATE_SCHEMA = _final_validate
