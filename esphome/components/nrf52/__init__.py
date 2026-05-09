@@ -165,15 +165,21 @@ def set_core_data(config: ConfigType) -> ConfigType:
 
 
 def set_framework(config: ConfigType) -> ConfigType:
-    config = config.copy()
-    zephyr_data()[CONF_VARIANT] = config[CONF_BOARD]
-    if "/" in config[CONF_BOARD]:
-        zephyr_data()[KEY_BOARD] = config[CONF_BOARD].split("/")[0]
-    if CONF_FRAMEWORK not in config:
-        config[CONF_FRAMEWORK] = FRAMEWORK_SCHEMA({})
-    version = cv.Version.parse(cv.version_number(config[CONF_FRAMEWORK][CONF_VERSION]))
-    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = version
-    return config
+    framework_ver = cv.Version.parse(
+        cv.version_number(config[CONF_FRAMEWORK][CONF_VERSION])
+    )
+    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = framework_ver
+    if framework_ver < cv.Version(2, 9, 2):
+        return cv.require_framework_version(
+            nrf52_zephyr=cv.Version(2, 6, 1, "a"),
+        )(config)
+    if framework_ver < cv.Version(3, 2, 0):
+        return cv.require_framework_version(
+            nrf52_zephyr=cv.Version(2, 9, 2, "2"),
+        )(config)
+    return cv.require_framework_version(
+        nrf52_zephyr=cv.Version(3, 2, 0, "1"),
+    )(config)
 
 
 BOOTLOADERS = [
@@ -242,7 +248,11 @@ CONFIG_SCHEMA = cv.All(
                     cv.Optional(CONF_UICR_ERASE, default=False): cv.boolean,
                 }
             ),
-            cv.Optional(CONF_FRAMEWORK): FRAMEWORK_SCHEMA,
+            cv.Optional(CONF_FRAMEWORK, default={CONF_VERSION: "2.6.1-a"}): cv.Schema(
+                {
+                    cv.Required(CONF_VERSION): cv.string_strict,
+                }
+            ),
         }
     ),
     set_framework,
@@ -282,11 +292,13 @@ async def to_code(config: ConfigType) -> None:
     cg.add_platformio_option(CONF_FRAMEWORK, CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK])
     cg.add_platformio_option(
         "platform",
-        config[CONF_FRAMEWORK][CONF_PLATFORM_VERSION],
+        "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-5.zip",
     )
     cg.add_platformio_option(
         "platform_packages",
-        config[CONF_FRAMEWORK][CONF_COMPONENTS],
+        [
+            f"platformio/framework-zephyr@https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v{CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]}.zip",
+        ],
     )
 
     if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:

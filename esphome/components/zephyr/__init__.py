@@ -216,11 +216,12 @@ def copy_files():
         zephyr_data()[KEY_OVERLAY],
     )
 
-    if zephyr_data()[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT or zephyr_data()[
-        KEY_BOARD
-    ] in ["xiao_ble"]:
-        fake_board_manifest = f"""
-{{
+    if (
+        zephyr_data()[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT
+        or zephyr_data()[KEY_BOARD] == "xiao_ble"
+    ):
+        fake_board_manifest = """
+{
     "frameworks": [
         "zephyr"
     ],
