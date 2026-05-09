@@ -1,5 +1,0 @@
-network:
-  enable_ipv6: true
-
-mdns:
-  disabled: false
